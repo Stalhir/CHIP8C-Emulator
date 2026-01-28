@@ -3,6 +3,7 @@
 #include <array>
 #include <stack>
 #include <stdint.h>
+#include <SFML/Window.hpp>
 
 
 enum class InstructionType {
@@ -68,17 +69,23 @@ class ChipEmulator
     std::array<uint8_t, 4096> memory;
     std::array<uint16_t, 16> stack;
     std::array<uint8_t, 16> registers;
+    std::vector<uint8_t> FrameBuffer;
 
     uint16_t programcounter = 0x200;
-    uint16_t indexRegister; // Тот самый регистр I
-    uint8_t stackpointer{0};
+    uint16_t indexRegister = 0; // Тот самый регистр I
+    uint8_t stackpointer = 0;
 
-    uint8_t DelayTimer;
-    uint8_t SoundTimer;
+    uint8_t DelayTimer  = 0;
+    uint8_t SoundTimer  = 0;
 
-    uint8_t FrameBuffer[2048];
+
 
     std::ifstream file;
+
+    bool CheckKeyPressed(uint8_t keynumber);
+
+    uint8_t ReadKey();
+
     public:
     // из rom файла все инструкции загружаются в память и уже потом выполняется? std::hex используем
 

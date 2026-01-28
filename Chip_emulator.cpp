@@ -2,12 +2,11 @@
 #include <vector>
 #include <iostream>
 
-ChipEmulator::ChipEmulator(std::string filePath)  : file(filePath)
+ChipEmulator::ChipEmulator(std::string filePath)  : file(filePath), FrameBuffer(2048, 0)
 {
 if (!file.is_open()) {
     throw std::invalid_argument("File not open");
 }
-
 }
 
 void ChipEmulator::ReadFile()
@@ -89,7 +88,7 @@ DecodedInstruction inst;
                 case 0x18: inst.type = InstructionType::LD_ST_VX; break;
                 case 0x1E: inst.type = InstructionType::ADD_I_VX; break;
                 case 0x29: inst.type = InstructionType::LD_F_VX;  break;
-                case 0x33: inst.type = InstructionType::LD_B_VX;  break;
+                case 0x33: inst.type = InstructionType::LD_B_VX;  break; // CДЕЛАТЬ
                 case 0x55: inst.type = InstructionType::LD_I_VX;  break;
                 case 0x65: inst.type = InstructionType::LD_VX_I;  break;
             }
@@ -107,12 +106,14 @@ void ChipEmulator::Execute(DecodedInstruction instruction)
 {
 switch (instruction.type)
 {
-    case InstructionType::CLS: break;
-    case InstructionType::RET: programcounter = stack[--stackpointer];
-    break;
+    case InstructionType::CLS: FrameBuffer.assign(FrameBuffer.size(), 0);
+        break;
+    case InstructionType::RET:if (stackpointer == 0) throw std::runtime_error("Stack underflow");
+        programcounter = stack[--stackpointer];
+        break;
 
     case InstructionType::JP: programcounter = instruction.nnn; break;
-    case InstructionType::CALL: stack[stackpointer] = programcounter+2;
+    case InstructionType::CALL: if (stackpointer >= stack.size()) throw std::runtime_error("Stack overflow"); stack[stackpointer] = programcounter;
         stackpointer++; programcounter = instruction.nnn ;
     break;
     case InstructionType::SE_VX_BYTE: if (registers[instruction.x] == instruction.kk) programcounter+=2; break;
@@ -146,7 +147,7 @@ switch (instruction.type)
     }
     case InstructionType::SHR_VX: {
         uint8_t lsb = registers[instruction.x] & 0x01;
-        registers[instruction.x] <<= 1;
+        registers[instruction.x] >>= 1;
         registers[0xF] = lsb;
         break;
     }
@@ -166,8 +167,130 @@ switch (instruction.type)
     }
 
 
-    case InstructionType::SNE_VX_VY: {}
+    case InstructionType::SNE_VX_VY: if (registers[instruction.x] != registers[instruction.y]) programcounter+=2;
+        break;
+
+    case InstructionType::LD_I_ADDR: indexRegister = instruction.nnn;
+        break;
+
+    case InstructionType::JP_V0: programcounter = instruction.nnn + registers[0];
+        break;
+
+    case InstructionType::RND_VX_BYTE: registers[instruction.x] = (rand() & instruction.kk);
+        break;
+
+    case InstructionType::DRW:  break;// cделать
+
+
+    case InstructionType::SKP_VX: if (CheckKeyPressed(registers[instruction.x])) programcounter+=2;
+        break;
+    case InstructionType::SKNP_VX: if (!CheckKeyPressed(registers[instruction.x])) programcounter+=2;
+        break;
+
+    case InstructionType::LD_VX_DT: registers[instruction.x] = DelayTimer;
+        break;
+    case InstructionType::LD_VX_K: {
+        uint8_t key = ReadKey();
+        if (key != 0xFF) {
+            registers[instruction.x] = key;
+        } else {
+            programcounter -= 2;
+        }
+        break;
+    }
+    case InstructionType::LD_DT_VX: DelayTimer = registers[instruction.x];
+        break;
+    case InstructionType::LD_ST_VX:  SoundTimer = registers[instruction.x];
+        break;
+    case InstructionType::ADD_I_VX:  indexRegister += registers[instruction.x];
+        break;
+    case InstructionType::LD_F_VX: indexRegister = registers[instruction.x] * 5;
+        break;
+
+    case InstructionType::LD_B_VX: {
+        uint8_t val = registers.at(instruction.x);
+        memory.at(indexRegister) = val / 100;
+        memory.at(indexRegister + 1) = (val / 10) % 10;
+        memory.at(indexRegister + 2) = val % 10;
+        break;
+    }
+
+    case InstructionType::LD_I_VX: {
+        for (int i = 0; i <= instruction.x; i++) {
+            if (indexRegister + i < memory.size()) {
+                memory[indexRegister + i] = registers[i];
+            }
+        }
+        break;
+    }
+    case InstructionType::LD_VX_I: {
+        for (int i = 0; i <= instruction.x; i++) {
+            if (indexRegister + i < memory.size()) {
+                registers[i] = memory[indexRegister + i];
+            }
+        }
+        break;
+    }
+
+    case InstructionType::UKNOWN: break;
 }
+}
+
+bool ChipEmulator::CheckKeyPressed(uint8_t keynumber)
+{
+if (keynumber > 0xF) return false;
+switch (keynumber)
+    {
+    case 0x0:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::X); break;
+    case 0x1:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num1); break;
+    case 0x2:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num2); break;
+    case 0x3:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num3); break;
+    case 0x4:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q); break;
+    case 0x5:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W); break;
+    case 0x6:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E); break;
+    case 0x7:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A); break;
+    case 0x8:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S); break;
+    case 0x9:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D); break;
+    case 0xA:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Z); break;
+    case 0xB:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C); break;
+    case 0xC:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num4); break;
+    case 0xD:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R); break;
+    case 0xE:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::F); break;
+    case 0xF:
+        return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V); break;
+    }
+    return false;
+}
+
+uint8_t ChipEmulator::ReadKey() {
+    sf::Keyboard::Key chip8Keys[16] = {
+        sf::Keyboard::Key::X, sf::Keyboard::Key::Num1, sf::Keyboard::Key::Num2,
+        sf::Keyboard::Key::Num3, sf::Keyboard::Key::Q, sf::Keyboard::Key::W, sf::Keyboard::Key::E,
+        sf::Keyboard::Key::A, sf::Keyboard::Key::S, sf::Keyboard::Key::D, sf::Keyboard::Key::Z, sf::Keyboard::Key::C,
+        sf::Keyboard::Key::Num4, sf::Keyboard::Key::R,sf::Keyboard::Key::F, sf::Keyboard::Key::V
+    };
+    for (int i = 0; i < 16; i++)
+    {
+        if (sf::Keyboard::isKeyPressed(chip8Keys[i])) {
+            return i;
+        }
+    }
+    return 0xFF;
 }
 
 
