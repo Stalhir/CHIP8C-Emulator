@@ -1,0 +1,11 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ipch
+*.sdf
+*.VC.db
+*.VC.VC.opendb
+out/
