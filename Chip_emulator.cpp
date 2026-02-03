@@ -2,28 +2,69 @@
 #include <vector>
 #include <iostream>
 
-ChipEmulator::ChipEmulator(std::string filePath)  : file(filePath), FrameBuffer(2048, 0)
+ChipEmulator::ChipEmulator(std::string filePath)  : file(filePath, std::ios::binary), FrameBuffer(32, std::vector<uint8_t>(64, 0)),
+window(sf::VideoMode(sf::Vector2u(640, 320)), "CHIP-8 Emulator")
+, texture()
+, sprite(texture)
 {
-if (!file.is_open()) {
-    throw std::invalid_argument("File not open");
-}
+    std::fill(memory.begin(), memory.end(), 0);
+    std::fill(registers.begin(), registers.end(), 0);
+    std::fill(stack.begin(), stack.end(), 0);
+
+    uint8_t chip8_fontset[80] = {
+        0xF0, 0x90, 0x90, 0x90, 0xF0, 
+        0x20, 0x60, 0x20, 0x20, 0x70, 
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, 
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, 
+        0x90, 0x90, 0xF0, 0x10, 0x10, 
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, 
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, 
+        0xF0, 0x10, 0x20, 0x40, 0x40, 
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, 
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, 
+        0xF0, 0x90, 0xF0, 0x90, 0x90, 
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, 
+        0xF0, 0x80, 0x80, 0x80, 0xF0, 
+        0xE0, 0x90, 0x90, 0x90, 0xE0,
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, 
+        0xF0, 0x80, 0xF0, 0x80, 0x80  
+    };
+    for (int i = 0; i < 80; ++i) {
+        memory[i] = chip8_fontset[i];
+    }
+
+    ReadFile();
+  
+
+    window.setFramerateLimit(60);
+
+  
+    sprite.setScale(sf::Vector2f(10, 10));
+
+
+    srand(static_cast<unsigned>(time(nullptr)));
+
+    std::cout << "CHIP-8 Emulator initialized. PC: " << programcounter << std::endl;
 }
 
 void ChipEmulator::ReadFile()
 {
-uint8_t byte;
+    int address = 0x200;
 
-for (int i = 0; i < memory.size(); i++)
-{
-    if (!file.get(reinterpret_cast<char&>(byte))) { break; }
-    memory.at(i) = byte;
-}
+    char byte;
+    while (file.get(byte) && address < 4096) {
+        memory[address++] = static_cast<uint8_t>(byte);
+    }
 
+    std::cout << "Loaded " << (address - 0x200) << " bytes from ROM." << std::endl;
 }
 
 
 uint16_t ChipEmulator::Fetch()
 {
+    if (programcounter >= 4096 - 1) {
+        throw std::runtime_error("PC out of bounds");
+    }
     uint16_t opcode = (memory.at(programcounter) << 8) | memory.at(programcounter+1);
     programcounter += 2;
     return opcode;
@@ -88,7 +129,7 @@ DecodedInstruction inst;
                 case 0x18: inst.type = InstructionType::LD_ST_VX; break;
                 case 0x1E: inst.type = InstructionType::ADD_I_VX; break;
                 case 0x29: inst.type = InstructionType::LD_F_VX;  break;
-                case 0x33: inst.type = InstructionType::LD_B_VX;  break; // CДЕЛАТЬ
+                case 0x33: inst.type = InstructionType::LD_B_VX;  break; 
                 case 0x55: inst.type = InstructionType::LD_I_VX;  break;
                 case 0x65: inst.type = InstructionType::LD_VX_I;  break;
             }
@@ -106,7 +147,7 @@ void ChipEmulator::Execute(DecodedInstruction instruction)
 {
 switch (instruction.type)
 {
-    case InstructionType::CLS: FrameBuffer.assign(FrameBuffer.size(), 0);
+case InstructionType::CLS: for (int i = 0; i < 32; i++) { FrameBuffer.at(i).assign(64, 0); };   NeedDraw = true;
         break;
     case InstructionType::RET:if (stackpointer == 0) throw std::runtime_error("Stack underflow");
         programcounter = stack[--stackpointer];
@@ -179,7 +220,38 @@ switch (instruction.type)
     case InstructionType::RND_VX_BYTE: registers[instruction.x] = (rand() & instruction.kk);
         break;
 
-    case InstructionType::DRW:  break;// cделать
+    case InstructionType::DRW: {
+        uint8_t x = registers[instruction.x] % 64;  
+        uint8_t y = registers[instruction.y] % 32;
+        uint8_t height = instruction.kk;
+
+        registers[0xF] = 0;
+
+        for (uint8_t row = 0; row < height; ++row) {
+            if (y + row >= 32) break;
+
+            uint8_t byte = memory[indexRegister + row];
+       
+            for (int bit = 0; bit < 8; ++bit) {
+                if (x + bit >= 64) break;
+
+                uint8_t color = (byte >> (7 - bit)) & 1;
+
+                uint8_t oldPixel = FrameBuffer[y + row][x + bit];
+
+            
+                if (color == 1) {
+                    FrameBuffer[y + row][x + bit] ^= 1; 
+                    if (FrameBuffer[y + row][x + bit] == 0) {
+                        registers[0xF] = 1;  
+                    }
+                }
+            }
+        }
+
+        NeedDraw = true;
+        break;
+    }
 
 
     case InstructionType::SKP_VX: if (CheckKeyPressed(registers[instruction.x])) programcounter+=2;
@@ -235,6 +307,39 @@ switch (instruction.type)
     case InstructionType::UKNOWN: break;
 }
 }
+
+
+void ChipEmulator::Draw()
+    {
+            window.clear(sf::Color::Black);
+
+            sf::Image image;
+            image.resize(sf::Vector2u(64, 32));
+
+            for (unsigned int y = 0; y < 32; ++y) {
+            for (unsigned int x = 0; x < 64; ++x) {
+                image.setPixel(sf::Vector2u(x, y), sf::Color::Black);
+            }
+        }
+
+        for (int y = 0; y < 32; ++y) {
+            for (int x = 0; x < 64; ++x) {
+                if (FrameBuffer[y][x] == 1) {
+                    image.setPixel(sf::Vector2u(x, y), sf::Color::White);
+                }
+            }
+        }
+        if (!texture.loadFromImage(image)) {
+            std::cerr << "Failed to load texture from image" << std::endl;
+            return;
+        }
+        sprite = sf::Sprite(texture);
+        sprite.setScale(sf::Vector2f(10, 10));
+
+        window.draw(sprite);
+        NeedDraw = false;
+}
+
 
 bool ChipEmulator::CheckKeyPressed(uint8_t keynumber)
 {
@@ -294,6 +399,41 @@ uint8_t ChipEmulator::ReadKey() {
 }
 
 
+void ChipEmulator::GameCycle()
+{
+    sf::Clock timerClock;
+  
+
+    while (window.isOpen()) {
+        
+        while (std::optional<sf::Event> event = window.pollEvent()) {
+            if (event->is<sf::Event::Closed>()) {
+                window.close();
+            }
+        }
+        uint16_t opcode = Fetch();
+        DecodedInstruction inst = Decode(opcode);
+        Execute(inst);
+
+
+        if (timerClock.getElapsedTime().asMilliseconds() >= 2) {
+            if (DelayTimer > 0) DelayTimer--;
+            if (SoundTimer > 0) {
+                SoundTimer--;
+            }
+            timerClock.restart();
+        }
+
+        if (NeedDraw) { Draw();  }
+
+      
+        sf::sleep(sf::milliseconds(1));  
+        window.display();
+    }
+
+}
+
 ChipEmulator::~ChipEmulator() {
     file.close();
 }
+

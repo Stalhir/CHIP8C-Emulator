@@ -3,6 +3,7 @@
 #include <array>
 #include <stack>
 #include <stdint.h>
+#include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 
 
@@ -69,16 +70,19 @@ class ChipEmulator
     std::array<uint8_t, 4096> memory;
     std::array<uint16_t, 16> stack;
     std::array<uint8_t, 16> registers;
-    std::vector<uint8_t> FrameBuffer;
+    std::vector<std::vector<uint8_t>> FrameBuffer;  
 
     uint16_t programcounter = 0x200;
-    uint16_t indexRegister = 0; // Тот самый регистр I
+    uint16_t indexRegister = 0; 
     uint8_t stackpointer = 0;
 
     uint8_t DelayTimer  = 0;
     uint8_t SoundTimer  = 0;
-
-
+     
+    sf::RenderWindow window; // тут забыл нахуй как
+    sf::Texture texture;
+    sf::Sprite sprite; 
+    bool NeedDraw;
 
     std::ifstream file;
 
@@ -97,8 +101,14 @@ class ChipEmulator
 
     void Execute(DecodedInstruction instruction);
 
+    void Draw();
+
+    void GameCycle();
+
     ChipEmulator(std::string filePath);
 
     ~ChipEmulator();
+
+
 };
 
