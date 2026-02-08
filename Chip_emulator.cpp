@@ -7,6 +7,9 @@ window(sf::VideoMode(sf::Vector2u(640, 320)), "CHIP-8 Emulator")
 , texture()
 , sprite(texture)
 {
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open  file");
+    }
     std::fill(memory.begin(), memory.end(), 0);
     std::fill(registers.begin(), registers.end(), 0);
     std::fill(stack.begin(), stack.end(), 0);
@@ -96,7 +99,7 @@ DecodedInstruction inst;
         case 0x6: inst.type = InstructionType::LD_VX_BYTE; break;
         case 0x7: inst.type = InstructionType::ADD_VX_BYTE; break;
 
-        case 0x8: // ГРУППА АРИФМЕТИКИ (смотрим на последнюю цифру N)
+        case 0x8:
             switch (n) {
                 case 0x0: inst.type = InstructionType::LD_VX_VY;   break;
                 case 0x1: inst.type = InstructionType::OR_VX_VY;   break;
@@ -116,12 +119,12 @@ DecodedInstruction inst;
         case 0xC: inst.type = InstructionType::RND_VX_BYTE; break;
         case 0xD: inst.type = InstructionType::DRW;       break;
 
-        case 0xE: // ГРУППА ВВОДА (смотрим на весь последний байт KK)
+        case 0xE: 
             if (inst.kk == 0x9E) inst.type = InstructionType::SKP_VX;
             else if (inst.kk == 0xA1) inst.type = InstructionType::SKNP_VX;
             break;
 
-        case 0xF: // ГРУППА ТАЙМЕРОВ И ПАМЯТИ (смотрим на байт KK)
+        case 0xF: 
             switch (inst.kk) {
                 case 0x07: inst.type = InstructionType::LD_VX_DT; break;
                 case 0x0A: inst.type = InstructionType::LD_VX_K;  break;
@@ -147,7 +150,7 @@ void ChipEmulator::Execute(DecodedInstruction instruction)
 {
 switch (instruction.type)
 {
-case InstructionType::CLS: for (int i = 0; i < 32; i++) { FrameBuffer.at(i).assign(64, 0); };   NeedDraw = true;
+case InstructionType::CLS: std::fill(FrameBuffer.begin(), FrameBuffer.end(), std::vector<uint8_t>(64, 0)); NeedDraw = true;
         break;
     case InstructionType::RET:if (stackpointer == 0) throw std::runtime_error("Stack underflow");
         programcounter = stack[--stackpointer];
@@ -288,7 +291,7 @@ case InstructionType::CLS: for (int i = 0; i < 32; i++) { FrameBuffer.at(i).assi
     }
 
     case InstructionType::LD_I_VX: {
-        for (int i = 0; i <= instruction.x; i++) {
+        for (int i = 0; i <= instruction.x && i < 16; i++) {
             if (indexRegister + i < memory.size()) {
                 memory[indexRegister + i] = registers[i];
             }
@@ -296,7 +299,7 @@ case InstructionType::CLS: for (int i = 0; i < 32; i++) { FrameBuffer.at(i).assi
         break;
     }
     case InstructionType::LD_VX_I: {
-        for (int i = 0; i <= instruction.x; i++) {
+        for (int i = 0; i <= instruction.x && i < 16 ; i++) {
             if (indexRegister + i < memory.size()) {
                 registers[i] = memory[indexRegister + i];
             }
@@ -337,6 +340,7 @@ void ChipEmulator::Draw()
         sprite.setScale(sf::Vector2f(10, 10));
 
         window.draw(sprite);
+        window.display();
         NeedDraw = false;
 }
 
@@ -402,7 +406,9 @@ uint8_t ChipEmulator::ReadKey() {
 void ChipEmulator::GameCycle()
 {
     sf::Clock timerClock;
-  
+    sf::Clock frameClock;
+
+    const sf::Time frameTime = sf::milliseconds(16);
 
     while (window.isOpen()) {
         
@@ -426,9 +432,12 @@ void ChipEmulator::GameCycle()
 
         if (NeedDraw) { Draw();  }
 
-      
-        sf::sleep(sf::milliseconds(1));  
-        window.display();
+        sf::Time elapsed = frameClock.getElapsedTime();
+        if (elapsed < frameTime) {
+            sf::sleep(frameTime - elapsed);
+        }
+        frameClock.restart();
+
     }
 
 }

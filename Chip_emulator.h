@@ -79,7 +79,7 @@ class ChipEmulator
     uint8_t DelayTimer  = 0;
     uint8_t SoundTimer  = 0;
      
-    sf::RenderWindow window; // тут забыл нахуй как
+    sf::RenderWindow window;
     sf::Texture texture;
     sf::Sprite sprite; 
     bool NeedDraw;
@@ -91,7 +91,7 @@ class ChipEmulator
     uint8_t ReadKey();
 
     public:
-    // из rom файла все инструкции загружаются в память и уже потом выполняется? std::hex используем
+   
 
     void ReadFile();
 
